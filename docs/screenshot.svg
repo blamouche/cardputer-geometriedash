@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 135" width="720" height="405" shape-rendering="crispEdges" font-family="monospace">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#201448"/>
+      <stop offset="100%" stop-color="#602882"/>
+    </linearGradient>
+  </defs>
+
+  <!-- sky -->
+  <rect width="240" height="112" fill="url(#sky)"/>
+
+  <!-- background grid: vertical -->
+  <g stroke="#462E78" stroke-width="1">
+    <line x1="0.5"   y1="0" x2="0.5"   y2="112"/>
+    <line x1="24.5"  y1="0" x2="24.5"  y2="112"/>
+    <line x1="48.5"  y1="0" x2="48.5"  y2="112"/>
+    <line x1="72.5"  y1="0" x2="72.5"  y2="112"/>
+    <line x1="96.5"  y1="0" x2="96.5"  y2="112"/>
+    <line x1="120.5" y1="0" x2="120.5" y2="112"/>
+    <line x1="144.5" y1="0" x2="144.5" y2="112"/>
+    <line x1="168.5" y1="0" x2="168.5" y2="112"/>
+    <line x1="192.5" y1="0" x2="192.5" y2="112"/>
+    <line x1="216.5" y1="0" x2="216.5" y2="112"/>
+  </g>
+
+  <!-- background grid: horizontal -->
+  <g stroke="#462E78" stroke-width="1">
+    <line x1="0" y1="16.5" x2="240" y2="16.5"/>
+    <line x1="0" y1="40.5" x2="240" y2="40.5"/>
+    <line x1="0" y1="64.5" x2="240" y2="64.5"/>
+    <line x1="0" y1="88.5" x2="240" y2="88.5"/>
+  </g>
+
+  <!-- ground slab -->
+  <rect x="0" y="112" width="240" height="23" fill="#18102C"/>
+  <line x1="0" y1="112.5" x2="240" y2="112.5" stroke="#96E6FF" stroke-width="1"/>
+  <g stroke="#34265C" stroke-width="1">
+    <line x1="0.5"   y1="113" x2="0.5"   y2="135"/>
+    <line x1="24.5"  y1="113" x2="24.5"  y2="135"/>
+    <line x1="48.5"  y1="113" x2="48.5"  y2="135"/>
+    <line x1="72.5"  y1="113" x2="72.5"  y2="135"/>
+    <line x1="96.5"  y1="113" x2="96.5"  y2="135"/>
+    <line x1="120.5" y1="113" x2="120.5" y2="135"/>
+    <line x1="144.5" y1="113" x2="144.5" y2="135"/>
+    <line x1="168.5" y1="113" x2="168.5" y2="135"/>
+    <line x1="192.5" y1="113" x2="192.5" y2="135"/>
+    <line x1="216.5" y1="113" x2="216.5" y2="135"/>
+  </g>
+
+  <!-- spike (just cleared) -->
+  <polygon points="110,112 124,112 117,98" fill="#FF5656" stroke="#781414" stroke-width="1"/>
+
+  <!-- ride-on block -->
+  <rect x="170" y="96" width="16" height="16" fill="#5AC8FF" stroke="#145082" stroke-width="1"/>
+  <line x1="171" y1="97" x2="184" y2="97" stroke="#FFFFFF" stroke-width="1"/>
+
+  <!-- next spike coming up -->
+  <polygon points="210,112 224,112 217,98" fill="#FF5656" stroke="#781414" stroke-width="1"/>
+
+  <!-- player cube, mid-jump, rotated -->
+  <g transform="rotate(25 53 77)">
+    <rect x="46" y="70" width="14" height="14" fill="#FFCE38" stroke="#784600" stroke-width="1"/>
+    <rect x="50" y="74" width="6"  height="6"  fill="#FFF0AA"/>
+  </g>
+
+  <!-- HUD -->
+  <text x="4"   y="11" fill="#FFFFFF" font-size="9" font-weight="bold">127</text>
+  <text x="180" y="11" fill="#AAA0C8" font-size="9">BEST 412</text>
+</svg>

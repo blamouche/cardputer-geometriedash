@@ -13,8 +13,28 @@
 
 #include <M5Cardputer.h>
 #include <Preferences.h>
+#include <SPI.h>
+#include <SD.h>
+#include <LittleFS.h>
+#include <FS.h>
 #include <vector>
 #include <cmath>
+
+// Injected at build time by scripts/version.py (reads the VERSION file).
+#ifndef GD_VERSION
+#define GD_VERSION "dev"
+#endif
+
+// SD pins for the M5Stack Cardputer.
+static constexpr int SD_SCK  = 40;
+static constexpr int SD_MISO = 39;
+static constexpr int SD_MOSI = 14;
+static constexpr int SD_CS   = 12;
+
+// Where persistent state lives - tried on SD first, then internal LittleFS.
+// Plain text key=value so users can back it up / hand-edit between flashes.
+static constexpr const char* SETTINGS_PATH =
+    "/cardputer-geometriedash-settings.txt";
 
 // --- screen / world geometry ------------------------------------------------
 static constexpr int   SCREEN_W   = 240;
@@ -78,7 +98,6 @@ struct Particle {
 // ---------------------------------------------------------------------------
 
 M5Canvas   canvas(&M5Cardputer.Display);
-Preferences prefs;
 
 GameState  gameState = STATE_MENU;
 
@@ -90,10 +109,26 @@ bool   onGround   = true;
 
 // world state
 float  scrollSpeed = SPEED_MIN;
-double distance    = 0.0;          // travelled distance == score
+double distance    = 0.0;          // travelled distance == score (current run)
 int    bestScore   = 0;
-int    attempts    = 0;
+int    attempts    = 0;            // lifetime death count
+long long lifetimeScore = 0;       // sum of all run scores
 float  bgScroll    = 0.0f;
+
+// persistence backend (set during setup, read by HUD + save paths)
+enum StorageKind { STORE_NONE, STORE_SD, STORE_LITTLEFS };
+StorageKind storeKind = STORE_NONE;
+
+static FS& storeFS() {
+    return (storeKind == STORE_SD) ? (FS&)SD : (FS&)LittleFS;
+}
+static const char* storeName() {
+    switch (storeKind) {
+        case STORE_SD:       return "SD";
+        case STORE_LITTLEFS: return "FS";
+        default:             return "RAM";
+    }
+}
 
 std::vector<Obstacle> obstacles;
 std::vector<Particle> particles;
@@ -206,6 +241,78 @@ static void spawnPattern() {
 }
 
 // ---------------------------------------------------------------------------
+//  Persistent settings - "cardputer-geometriedash-settings.txt"
+// ---------------------------------------------------------------------------
+//  Tries the SD card first (survives any reflash), then internal LittleFS
+//  (survives a normal `pio run -t upload` but is wiped by `erase_flash`).
+//  On first boot with no file but a legacy NVS best score, that score is
+//  migrated into the new file so existing players don't lose their progress.
+// ---------------------------------------------------------------------------
+
+static void initStorage() {
+    SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+    if (SD.begin(SD_CS, SPI, 25000000)) {
+        storeKind = STORE_SD;
+        return;
+    }
+    if (LittleFS.begin(true)) {
+        storeKind = STORE_LITTLEFS;
+        return;
+    }
+    storeKind = STORE_NONE;
+}
+
+static void saveSettings();   // forward
+
+static void loadSettings() {
+    if (storeKind == STORE_NONE) return;
+
+    FS& fs = storeFS();
+    if (!fs.exists(SETTINGS_PATH)) {
+        // first run on this backend - migrate any legacy NVS best score
+        Preferences legacy;
+        if (legacy.begin("geodash", true)) {
+            bestScore = legacy.getInt("best", 0);
+            legacy.end();
+        }
+        saveSettings();
+        return;
+    }
+
+    File f = fs.open(SETTINGS_PATH, "r");
+    if (!f) return;
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0 || line[0] == '#') continue;
+        int eq = line.indexOf('=');
+        if (eq < 0) continue;
+        String key = line.substring(0, eq);
+        String val = line.substring(eq + 1);
+        key.trim();
+        val.trim();
+        if      (key == "best")           bestScore     = val.toInt();
+        else if (key == "attempts")       attempts      = val.toInt();
+        else if (key == "lifetime_score") lifetimeScore = atoll(val.c_str());
+    }
+    f.close();
+}
+
+static void saveSettings() {
+    if (storeKind == STORE_NONE) return;
+    FS& fs = storeFS();
+    File f = fs.open(SETTINGS_PATH, "w");
+    if (!f) return;
+    f.println("# Geometry Dash for Cardputer - persistent settings");
+    f.println("# Copy this file off the SD card to back up your history.");
+    f.printf("version=%s\n", GD_VERSION);
+    f.printf("best=%d\n", bestScore);
+    f.printf("attempts=%d\n", attempts);
+    f.printf("lifetime_score=%lld\n", (long long)lifetimeScore);
+    f.close();
+}
+
+// ---------------------------------------------------------------------------
 //  Collision
 // ---------------------------------------------------------------------------
 
@@ -234,10 +341,9 @@ static void killCube() {
     deadAt    = millis();
     attempts++;
     int score = (int)(distance / 10.0);
-    if (score > bestScore) {
-        bestScore = score;
-        prefs.putInt("best", bestScore);
-    }
+    lifetimeScore += score;
+    if (score > bestScore) bestScore = score;
+    saveSettings();
     spawnDeathBurst();
     // descending "you died" sound
     M5Cardputer.Speaker.tone(440, 70);
@@ -477,13 +583,20 @@ static void drawMenu() {
     drawObstacles();
     drawCube();
     drawCenteredText("GEOMETRY DASH", 34, 2, COL_CUBE);
-    drawCenteredText("Cardputer Edition", 54, 1, COL_TEXT_DIM);
+    char sub[40];
+    snprintf(sub, sizeof(sub), "Cardputer Edition  v%s", GD_VERSION);
+    drawCenteredText(sub, 54, 1, COL_TEXT_DIM);
     if ((millis() / 450) % 2) {
         drawCenteredText("press any key to start", 78, 1, COL_TEXT);
     }
-    char buf[32];
-    snprintf(buf, sizeof(buf), "best %d", bestScore);
+    char buf[48];
+    snprintf(buf, sizeof(buf), "best %d   attempts %d", bestScore, attempts);
     drawCenteredText(buf, 92, 1, COL_TEXT_DIM);
+    // tiny footer: which backend is keeping the history
+    canvas.setTextSize(1);
+    canvas.setTextColor(COL_TEXT_DIM);
+    canvas.setCursor(SCREEN_W - 28, SCREEN_H - 10);
+    canvas.printf("[%s]", storeName());
 }
 
 static void drawDead() {
@@ -523,8 +636,8 @@ void setup() {
     M5Cardputer.Speaker.begin();
     M5Cardputer.Speaker.setVolume(150);
 
-    prefs.begin("geodash", false);
-    bestScore = prefs.getInt("best", 0);
+    initStorage();
+    loadSettings();
 
     resetRun();
     lastFrame = millis();
